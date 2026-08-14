@@ -603,15 +603,10 @@ buildQemu() {
     mesonBin="$(command -v meson)"
   fi
   local qemuTargets=(qemu-system-aarch64)
-  # 完整版移植 AGL JNI 封装后恢复: 目标加 libqemu-gzvm.so
+  # AGL JNI 封装: 目标名是 qemu-gzvm(输出 libqemu-gzvm.so), 不能用文件名
   if [ -f "$scriptDir/system/agl-main.c" ]; then
-    qemuTargets+=(libqemu-gzvm.so)
+    qemuTargets+=(qemu-gzvm)
   fi
-  echo "=== introspect 精确目标 ==="
-  "$mesonBin" introspect "$qemuBuild" --targets 2>/dev/null | tr ',' '\n' | grep -E '"name": "(qemu-gzvm|qemu-system-aarch64)"' || true
-  echo "=== ninja targets ==="
-  ninja -C "$qemuBuild" -t targets all 2>/dev/null | grep -iE "gzvm\.so|qemu-system-aarch64:" | head -5 || true
-  echo ""
   "$mesonBin" compile -C "$qemuBuild" "${qemuTargets[@]}" -j"$nCpu"
 }
 packageQemu() {
