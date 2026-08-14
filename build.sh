@@ -263,6 +263,9 @@ fetchSources() {
   fetch "https://raw.githubusercontent.com/qemu/qemu/master/subprojects/packagefiles/berkeley-softfloat-3/meson_options.txt" "$sfDir/berkeley-softfloat-3/meson_options.txt"
   fetch "https://raw.githubusercontent.com/qemu/qemu/master/subprojects/packagefiles/berkeley-testfloat-3/meson.build" "$sfDir/berkeley-testfloat-3/meson.build"
   fetch "https://raw.githubusercontent.com/qemu/qemu/master/subprojects/packagefiles/berkeley-testfloat-3/meson_options.txt" "$sfDir/berkeley-testfloat-3/meson_options.txt"
+  # pyvenv/meson.build: meson.build:4599 引用, 712d 树缺失(AnyLaySys 导入遗漏, 原 workflow 也手动下载)
+  mkdir -p "$scriptDir/pyvenv"
+  fetch "https://raw.githubusercontent.com/qemu/qemu/master/pyvenv/meson.build" "$scriptDir/pyvenv/meson.build"
   if [ ! -f "$scriptDir/subprojects/dtc/meson.build" ] || [ ! -f "$scriptDir/subprojects/keycodemapdb/README" ]; then
     meson subprojects download --sourcedir "$scriptDir" dtc keycodemapdb
   fi
