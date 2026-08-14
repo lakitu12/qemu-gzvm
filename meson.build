@@ -81,7 +81,11 @@ python = import('python').find_installation()
 
 cc = meson.get_compiler('c')
 all_languages = ['c']
-is_android = cc.get_define('__ANDROID__') != ''
+fs = import('fs')
+# Android 构建判定: 编译器宏检测在部分 cross 环境下失效,
+# 以 android 专属源文件 system/agl-main.c 存在为准
+is_android = cc.get_define('__ANDROID__') != '' or \
+             fs.exists(meson.current_source_dir() / 'system/agl-main.c')
 android_native_window = not_found
 android_log = not_found
 if is_android
