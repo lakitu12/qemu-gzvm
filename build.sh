@@ -580,6 +580,7 @@ buildQemu() {
     --disable-werror
     --disable-install-blobs
     -Dslirp:default_library=static
+    -Daudio_drv_list=aaudio
     -Doptimization=3
     -Ddebug=false
     -Db_ndebug=false

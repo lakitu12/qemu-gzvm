@@ -72,6 +72,13 @@ if host_os == 'linux'
   system_ss.add(files('input-linux.c', 'udmabuf.c'))
 endif
 system_ss.add(when: cocoa, if_true: files('cocoa.m'))
+if is_android
+  system_ss.add(opengl, android_native_window, files(
+    'agl.c',
+    'egl-helpers.c',
+    'shader.c',
+  ))
+endif
 
 vnc_ss = ss.source_set()
 vnc_ss.add(files(

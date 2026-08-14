@@ -22,7 +22,8 @@ foreach m : [
   ['jack', jack, files('jackaudio.c')],
   ['sndio', sndio, files('sndioaudio.c')],
   ['pipewire', pipewire, files('pwaudio.c')],
-  ['spice', spice, files('spiceaudio.c')]
+  ['spice', spice, files('spiceaudio.c')],
+  ['aaudio', aaudio, files('aaudioaudio.c')]
 ]
   if m[1].found()
     module_ss = ss.source_set()

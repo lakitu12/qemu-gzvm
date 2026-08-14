@@ -81,6 +81,13 @@ python = import('python').find_installation()
 
 cc = meson.get_compiler('c')
 all_languages = ['c']
+is_android = cc.get_define('__ANDROID__') != ''
+android_native_window = not_found
+android_log = not_found
+if is_android
+  android_native_window = cc.find_library('android', required: true)
+  android_log = cc.find_library('log', required: true)
+endif
 enable_cpp = host_os == 'windows' or get_option('plugins')
 if enable_cpp and add_languages('cpp', required: false, native: false)
   all_languages += ['cpp']
@@ -2262,9 +2269,14 @@ endif
 config_host_data = configuration_data()
 
 config_host_data.set('CONFIG_HAVE_RUST', have_rust)
+aaudio = not_found
+if host_os == 'linux' and have_system
+  aaudio = cc.find_library('aaudio', required: false)
+endif
 audio_drivers_selected = []
 if have_system
   audio_drivers_available = {
+    'aaudio': aaudio.found(),
     'alsa': alsa.found(),
     'coreaudio': coreaudio.found(),
     'dsound': dsound.found(),
@@ -2302,6 +2314,7 @@ if have_system
 endif
 config_host_data.set('CONFIG_AUDIO_DRIVERS',
                      '"' + '", "'.join(audio_drivers_selected) + '", ')
+config_host_data.set('CONFIG_AGL', is_android)
 
 have_host_block_device = (host_os != 'darwin' or
     cc.has_header('IOKit/storage/IOMedia.h'))
@@ -4470,6 +4483,23 @@ foreach target : target_dirs
                                install_input)
     else
       emulators += {exe['name']: emulator}
+    endif
+
+    if is_android and target.endswith('-softmmu')
+      jni_name = 'qemu-gzvm'
+      jni_version_script = meson.current_source_dir() / 'system/agl-jni.map'
+      emulators += {jni_name: shared_library(jni_name,
+                   files('system/agl-main.c'),
+                   install: true,
+                   c_args: c_args,
+                   dependencies: arch_deps + [android_log],
+                   gnu_symbol_visibility: 'hidden',
+                   objects: lib.extract_all_objects(recursive: true),
+                   link_depends: [block_syms, qemu_syms, jni_version_script],
+                   link_args: link_args + [
+                     '-Wl,--wrap=exit',
+                     '-Wl,--version-script=' + jni_version_script,
+                   ])}
     endif
 
     traceable += [{
