@@ -1,12 +1,24 @@
+/*
+ * Android AAudio audio backend
+ *
+ * Adapted from the trimmed-build AAudio backend for QEMU 11.0.50
+ * (QOM AudioMixengBackend style).
+ */
 
 #include "qemu/osdep.h"
 #include "qemu/module.h"
 #include "qemu/audio.h"
+#include "qom/object.h"
 
-#define AUDIO_CAP "aaudio"
 #include "audio_int.h"
-
 #include <aaudio/AAudio.h>
+
+#define TYPE_AUDIO_AAUDIO "audio-aaudio"
+OBJECT_DECLARE_SIMPLE_TYPE(AudioAAudio, AUDIO_AAUDIO)
+
+struct AudioAAudio {
+    AudioMixengBackend parent_obj;
+};
 
 typedef struct AAudioVoiceOut {
     HWVoiceOut hw;
@@ -26,7 +38,7 @@ static aaudio_format_t qemu_to_aaudio_fmt(AudioFormat fmt)
     case AUDIO_FORMAT_F32:
         return AAUDIO_FORMAT_PCM_FLOAT;
     default:
-        dolog("Unsupported audio format %d, falling back to S16\n", fmt);
+        error_report("aaudio: unsupported format %d, falling back to S16", fmt);
         return AAUDIO_FORMAT_PCM_I16;
     }
 }
@@ -40,7 +52,7 @@ static AAudioStream *aaudio_open_stream(struct audsettings *as,
 
     res = AAudio_createStreamBuilder(&builder);
     if (res != AAUDIO_OK) {
-        dolog("AAudio_createStreamBuilder failed: %d\n", res);
+        error_report("aaudio: AAudio_createStreamBuilder failed: %d", res);
         return NULL;
     }
 
@@ -57,16 +69,14 @@ static AAudioStream *aaudio_open_stream(struct audsettings *as,
     AAudioStreamBuilder_delete(builder);
 
     if (res != AAUDIO_OK) {
-        dolog("AAudioStreamBuilder_openStream failed: %d\n", res);
+        error_report("aaudio: AAudioStreamBuilder_openStream failed: %d", res);
         return NULL;
     }
 
     return stream;
 }
 
-
-static int aaudio_init_out(HWVoiceOut *hw, struct audsettings *as,
-                           void *drv_opaque)
+static int aaudio_init_out(HWVoiceOut *hw, struct audsettings *as)
 {
     AAudioVoiceOut *aa = (AAudioVoiceOut *)hw;
 
@@ -106,7 +116,7 @@ static size_t aaudio_write(HWVoiceOut *hw, void *buf, size_t len)
 
     written = AAudioStream_write(aa->stream, buf, frames, 0);
     if (written < 0) {
-        dolog("AAudioStream_write failed: %d\n", written);
+        error_report("aaudio: AAudioStream_write failed: %d", written);
         return 0;
     }
 
@@ -128,9 +138,7 @@ static void aaudio_enable_out(HWVoiceOut *hw, bool enable)
     }
 }
 
-
-static int aaudio_init_in(HWVoiceIn *hw, struct audsettings *as,
-                          void *drv_opaque)
+static int aaudio_init_in(HWVoiceIn *hw, struct audsettings *as)
 {
     AAudioVoiceIn *aa = (AAudioVoiceIn *)hw;
 
@@ -170,7 +178,7 @@ static size_t aaudio_read(HWVoiceIn *hw, void *buf, size_t len)
 
     nread = AAudioStream_read(aa->stream, buf, frames, 0);
     if (nread < 0) {
-        dolog("AAudioStream_read failed: %d\n", nread);
+        error_report("aaudio: AAudioStream_read failed: %d", nread);
         return 0;
     }
 
@@ -192,46 +200,37 @@ static void aaudio_enable_in(HWVoiceIn *hw, bool enable)
     }
 }
 
-
-static void *aaudio_audio_init(Audiodev *dev, Error **errp)
+static void audio_aaudio_class_init(ObjectClass *klass, const void *data)
 {
-    return &aaudio_audio_init; /* non-NULL = success */
+    AudioMixengBackendClass *k = AUDIO_MIXENG_BACKEND_CLASS(klass);
+
+    k->max_voices_out = 1;
+    k->max_voices_in = 1;
+    k->voice_size_out = sizeof(AAudioVoiceOut);
+    k->voice_size_in = sizeof(AAudioVoiceIn);
+
+    k->init_out = aaudio_init_out;
+    k->fini_out = aaudio_fini_out;
+    k->write = aaudio_write;
+    k->buffer_get_free = audio_generic_buffer_get_free;
+    k->run_buffer_out = audio_generic_run_buffer_out;
+    k->enable_out = aaudio_enable_out;
+
+    k->init_in = aaudio_init_in;
+    k->fini_in = aaudio_fini_in;
+    k->read = aaudio_read;
+    k->run_buffer_in = audio_generic_run_buffer_in;
+    k->enable_in = aaudio_enable_in;
 }
 
-static void aaudio_audio_fini(void *opaque)
-{
-    (void)opaque;
-}
-
-static struct audio_pcm_ops aaudio_pcm_ops = {
-    .init_out       = aaudio_init_out,
-    .fini_out       = aaudio_fini_out,
-    .write          = aaudio_write,
-    .buffer_get_free = audio_generic_buffer_get_free,
-    .run_buffer_out = audio_generic_run_buffer_out,
-    .enable_out     = aaudio_enable_out,
-
-    .init_in        = aaudio_init_in,
-    .fini_in        = aaudio_fini_in,
-    .read           = aaudio_read,
-    .run_buffer_in  = audio_generic_run_buffer_in,
-    .enable_in      = aaudio_enable_in,
+static const TypeInfo audio_types[] = {
+    {
+        .name = TYPE_AUDIO_AAUDIO,
+        .parent = TYPE_AUDIO_MIXENG_BACKEND,
+        .instance_size = sizeof(AudioAAudio),
+        .class_init = audio_aaudio_class_init,
+    },
 };
 
-static struct audio_driver aaudio_audio_driver = {
-    .name           = "aaudio",
-    .descr          = "Android AAudio audio",
-    .init           = aaudio_audio_init,
-    .fini           = aaudio_audio_fini,
-    .pcm_ops        = &aaudio_pcm_ops,
-    .max_voices_out = 1,
-    .max_voices_in  = 1,
-    .voice_size_out = sizeof(AAudioVoiceOut),
-    .voice_size_in  = sizeof(AAudioVoiceIn),
-};
-
-static void register_audio_aaudio(void)
-{
-    audio_driver_register(&aaudio_audio_driver);
-}
-type_init(register_audio_aaudio);
+DEFINE_TYPES(audio_types)
+module_obj(TYPE_AUDIO_AAUDIO);
