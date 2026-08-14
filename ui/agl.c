@@ -583,7 +583,7 @@ static void *agl_render_thread(void *opaque)
             qemu_gl_run_texture_blit(gls);
         }
 
-        egl_fb_setup_default(&win_fb, window_width, window_height);
+        egl_fb_setup_default(&win_fb, window_width, window_height, 0, 0);
         if (frame.cursor && frame.cursor_on) {
             double scale_x = (double)viewport_width / source_width;
             double scale_y = (double)viewport_height / source_height;
@@ -598,7 +598,7 @@ static void *agl_render_thread(void *opaque)
                 (frame.cursor_x - frame.cursor->hot_x) * scale_x;
             cursor_y = window_height - viewport_y - viewport_height +
                 (frame.cursor_y - frame.cursor->hot_y) * scale_y;
-            egl_texture_blend(gls, &win_fb, &cursor_fb,
+            egl_texture_blend(gls, &win_fb, &cursor_fb, false,
                               cursor_x, cursor_y, scale_x, scale_y);
         }
         pthread_mutex_lock(&agl.lock);
