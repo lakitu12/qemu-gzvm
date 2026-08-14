@@ -257,7 +257,6 @@ static jint agl_jni_run(JNIEnv *env, jobject self, jstring work_dir,
     log_started = agl_jni_log_start(&log);
     __android_log_print(ANDROID_LOG_INFO, "QEMU-GZVM",
                         "starting with %d arguments", argc);
-    aio_context_set_fdmon_io_uring_enabled(false);
     agl_jni_exit_status = EXIT_FAILURE;
     agl_jni_exit_armed = true;
     if (sigsetjmp(agl_jni_exit_jump, 1) == 0) {
