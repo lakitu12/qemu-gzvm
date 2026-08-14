@@ -1517,6 +1517,8 @@
 #
 # @dbus: Start a D-Bus service for the display.  (Since 7.0)
 #
+# @agl: Android AGL display (native window rendering).  (Since 11.0)
+#
 # Since: 2.12
 ##
 { 'enum'    : 'DisplayType',
@@ -1530,9 +1532,6 @@
     { 'name': 'cocoa', 'if': 'CONFIG_COCOA' },
     { 'name': 'spice-app', 'if': 'CONFIG_SPICE' },
     { 'name': 'dbus', 'if': 'CONFIG_DBUS_DISPLAY' },
-    # @agl: Android AGL display (native window rendering).
-    #
-    # Since: 11.0
     { 'name': 'agl', 'if': 'CONFIG_AGL' }
   ]
 }
