@@ -10,7 +10,7 @@
 #include <setjmp.h>
 #include <sys/ioctl.h>
 #include <sys/syscall.h>
-#include "block/aio.h"
+#include "qemu/aio.h"
 #include "qemu/main-loop.h"
 #include "system/system.h"
 #include "ui/agl.h"
