@@ -86,6 +86,9 @@ fs = import('fs')
 # 以 android 专属源文件 system/agl-main.c 存在为准
 is_android = cc.get_define('__ANDROID__') != '' or \
              fs.exists(meson.current_source_dir() / 'system/agl-main.c')
+message('DEBUG-AGL is_android=@0@ macro=@1@ fs=@2@'.format(is_android,
+        cc.get_define('__ANDROID__'),
+        fs.exists(meson.current_source_dir() / 'system/agl-main.c')))
 android_native_window = not_found
 android_log = not_found
 if is_android
