@@ -8,6 +8,7 @@
 #include "qemu/osdep.h"
 #include "qemu/module.h"
 #include "qemu/audio.h"
+#include "qemu/error-report.h"
 #include "qom/object.h"
 
 #include "audio_int.h"
