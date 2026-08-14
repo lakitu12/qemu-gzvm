@@ -47,10 +47,12 @@ jobs:
 
       # QEMU 26.8 要求 meson >= 1.5.0；Ubuntu 24.04 自带 1.3.2 不够。
       # 用独立 venv 安装，避开 PEP 668 的 externally-managed 限制。
-      - name: 安装 meson 1.5.0
+      # pyyaml: virglrenderer src/gallium 的 meson 需要 python3 yaml 模块，
+      #         且 meson 调用的 python3 就是本 venv 的（PATH 前置）。
+      - name: 安装 meson 1.5.0 + PyYAML
         run: |
           python3 -m venv "$HOME/meson-venv"
-          "$HOME/meson-venv/bin/pip" install --no-cache-dir meson==1.5.0
+          "$HOME/meson-venv/bin/pip" install --no-cache-dir meson==1.5.0 pyyaml
           echo "$HOME/meson-venv/bin" >> "$GITHUB_PATH"
 
       - name: 缓存 NDK
