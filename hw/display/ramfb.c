@@ -4,7 +4,7 @@
 #include "qapi/error.h"
 #include "qemu/module.h"
 #include "qom/object.h"
-#include "hw/qdev-core.h"
+#include "hw/core/qdev-core.h"
 #include "hw/nvram/fw_cfg.h"
 #include "ui/console.h"
 #include "exec/cpu-common.h"

@@ -1,6 +1,6 @@
 #include "qemu/osdep.h"
 #include <virgl/virglrenderer.h>
-#include "hw/qdev-properties.h"
+#include "hw/core/qdev-properties.h"
 #include "hw/virtio/virtio-gpu-bswap.h"
 #include "hw/virtio/virtio-gpu.h"
 #include "qapi/error.h"
