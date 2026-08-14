@@ -4493,6 +4493,7 @@ foreach target : target_dirs
     endif
 
     if is_android and target.endswith('-softmmu')
+      message('DEBUG-AGL JNI block executing target=@0@'.format(target))
       jni_name = 'qemu-gzvm'
       jni_version_script = meson.current_source_dir() / 'system/agl-jni.map'
       emulators += {jni_name: shared_library(jni_name,
