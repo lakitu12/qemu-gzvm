@@ -1,0 +1,119 @@
+# QEMU GZVM 交叉编译 workflow
+# 用法: Actions → Build QEMU GZVM → Run workflow (手动触发)
+# 产物: qemu-gzvm-<NDK版本> 包 (qemu-system-aarch64 + libqemu-gzvm.so + lib/ + fw/)
+#       als-jniLibs-arm64-v8a (可直接覆盖 ALS 工程 jniLibs/arm64-v8a/)
+name: Build QEMU GZVM
+
+on:
+  workflow_dispatch:
+    inputs:
+      NDK_RELEASE:
+        description: 'Android NDK 版本（r30-beta2 与本地一致）'
+        required: true
+        default: 'r30-beta2'
+        type: choice
+        options:
+          - r30-beta2
+          - r29
+          - r28
+      ALS_DIR:
+        description: 'ALS 工程根目录（留空=CI 虚拟目录，仅产出 jniLibs artifact；可填相对仓库根的路径或绝对路径）'
+        required: false
+        default: ''
+      UPLOAD_ARTIFACTS:
+        description: '上传构建产物'
+        required: false
+        default: true
+        type: boolean
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装宿主依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake ninja-build pkg-config patchelf \
+            python3 python3-venv git curl tar perl unzip \
+            bison flex zlib1g-dev libdrm-dev ca-certificates
+
+      # QEMU 26.8 要求 meson >= 1.5.0；Ubuntu 24.04 自带 1.3.2 不够。
+      # 用独立 venv 安装，避开 PEP 668 的 externally-managed 限制。
+      - name: 安装 meson 1.5.0
+        run: |
+          python3 -m venv "$HOME/meson-venv"
+          "$HOME/meson-venv/bin/pip" install --no-cache-dir meson==1.5.0
+          echo "$HOME/meson-venv/bin" >> "$GITHUB_PATH"
+
+      - name: 缓存 NDK
+        id: ndk-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.tool_cache }}/android-ndk-${{ github.event.inputs.NDK_RELEASE }}
+          key: ndk-${{ runner.os }}-${{ github.event.inputs.NDK_RELEASE }}
+
+      - name: 下载并解压 NDK
+        if: steps.ndk-cache.outputs.cache-hit != 'true'
+        run: |
+          curl -L --fail --retry 3 -o /tmp/ndk.zip \
+            "https://dl.google.com/android/repository/android-ndk-${{ github.event.inputs.NDK_RELEASE }}-linux.zip"
+          mkdir -p "${{ runner.tool_cache }}"
+          unzip -q /tmp/ndk.zip -d "${{ runner.tool_cache }}"
+          rm -f /tmp/ndk.zip
+
+      # build.sh 强制要求 $ALS_DIR/app/src/main 存在（packageQemu 会把
+      # libqemu-gzvm.so 拷进其 jniLibs/arm64-v8a/）。CI 上没有 ALS 工程，
+      # 默认建虚拟目录，构建完把 jniLibs 作为 artifact 上传。
+      - name: 准备 ALS 目录
+        run: |
+          if [ -n "${{ github.event.inputs.ALS_DIR }}" ]; then
+            case "${{ github.event.inputs.ALS_DIR }}" in
+              /*) ALS_ABS="${{ github.event.inputs.ALS_DIR }}" ;;
+              *)  ALS_ABS="${{ github.workspace }}/${{ github.event.inputs.ALS_DIR }}" ;;
+            esac
+          else
+            ALS_ABS="${{ github.workspace }}/als"
+          fi
+          mkdir -p "$ALS_ABS/app/src/main/jniLibs/arm64-v8a"
+          echo "ALS_DIR_CI=$ALS_ABS" >> "$GITHUB_ENV"
+
+      - name: 构建（build.sh 全流程）
+        env:
+          ANDROID_NDK_ROOT: ${{ runner.tool_cache }}/android-ndk-${{ github.event.inputs.NDK_RELEASE }}
+          ALS_DIR: ${{ env.ALS_DIR_CI }}
+        run: |
+          df -h
+          ./build.sh
+
+      # 腾出磁盘空间（14GB runner），只保留最终打包产物
+      - name: 清理中间产物
+        run: |
+          rm -rf "${{ runner.tool_cache }}/android-ndk-${{ github.event.inputs.NDK_RELEASE }}"
+          rm -rf build/src build/qemu build/sysroot
+          find build/out -mindepth 1 -maxdepth 1 ! -name qemu-gzvm -exec rm -rf {} +
+
+      - name: 上传 qemu-gzvm 包
+        if: github.event.inputs.UPLOAD_ARTIFACTS == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: qemu-gzvm-${{ github.event.inputs.NDK_RELEASE }}
+          path: build/out/qemu-gzvm/
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: 上传 ALS jniLibs
+        if: github.event.inputs.UPLOAD_ARTIFACTS == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: als-jniLibs-arm64-v8a
+          path: ${{ env.ALS_DIR_CI }}/app/src/main/jniLibs/arm64-v8a/
+          if-no-files-found: error
+          retention-days: 7
