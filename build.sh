@@ -607,8 +607,8 @@ buildQemu() {
   if [ -f "$scriptDir/system/agl-main.c" ]; then
     qemuTargets+=(libqemu-gzvm.so)
   fi
-  echo "=== meson 目标列表(前2000字符)==="
-  "$mesonBin" introspect "$qemuBuild" --targets 2>/dev/null | head -c 2000 || true
+  echo "=== meson 目标列表(qemu-gzvm 相关)==="
+  "$mesonBin" introspect "$qemuBuild" --targets 2>/dev/null | tr ',' '\n' | grep -iE "qemu-gzvm|qemu-system-aarch64" | head -10 || true
   echo ""
   "$mesonBin" compile -C "$qemuBuild" "${qemuTargets[@]}" -j"$nCpu"
 }
