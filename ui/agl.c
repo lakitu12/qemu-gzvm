@@ -849,7 +849,7 @@ static void agl_refresh(DisplayChangeListener *dcl)
     bool refresh_changed;
     bool output_changed;
 
-    graphic_hw_update(dcl->con);
+    qemu_console_update_full(dcl->con);
     pthread_mutex_lock(&agl.lock);
     refresh_rate = agl.refresh_rate;
     output_width = agl.output_width;
@@ -863,12 +863,12 @@ static void agl_refresh(DisplayChangeListener *dcl)
     if (refresh_changed) {
         uint64_t interval = MAX(1ULL, 1000000ULL / refresh_rate);
 
-        update_displaychangelistener(dcl, interval);
+        qemu_console_listener_set_refresh(dcl, interval);
         agl.applied_refresh_rate = refresh_rate;
     }
     if ((refresh_changed || output_changed) &&
-        dpy_ui_info_supported(dcl->con)) {
-        QemuUIInfo info = *dpy_get_ui_info(dcl->con);
+        qemu_console_ui_info_supported(dcl->con)) {
+        QemuUIInfo info = *qemu_console_get_ui_info(dcl->con);
 
         if (refresh_rate) {
             info.refresh_rate = refresh_rate;
@@ -877,7 +877,7 @@ static void agl_refresh(DisplayChangeListener *dcl)
             info.width = output_width;
             info.height = output_height;
         }
-        dpy_set_ui_info(dcl->con, &info, false);
+        qemu_console_set_ui_info(dcl->con, &info, false);
         agl.applied_output_width = output_width;
         agl.applied_output_height = output_height;
     }
@@ -960,7 +960,7 @@ static void agl_display_init(DisplayState *ds, DisplayOptions *options)
     agl.dcl.con = console;
     agl.dgc.ops = &agl_gl_ops;
     qemu_console_set_display_gl_ctx(console, &agl.dgc);
-    register_displaychangelistener(&agl.dcl);
+    qemu_console_register_listener(agl.dcl.con, &agl.dcl, agl.dcl.ops);
     if (pthread_create(&agl.thread, NULL, agl_render_thread, NULL)) {
         error_report("AGL: renderer thread creation failed");
         exit(1);

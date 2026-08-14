@@ -1529,7 +1529,8 @@
     { 'name': 'curses', 'if': 'CONFIG_CURSES' },
     { 'name': 'cocoa', 'if': 'CONFIG_COCOA' },
     { 'name': 'spice-app', 'if': 'CONFIG_SPICE' },
-    { 'name': 'dbus', 'if': 'CONFIG_DBUS_DISPLAY' }
+    { 'name': 'dbus', 'if': 'CONFIG_DBUS_DISPLAY' },
+    { 'name': 'agl', 'if': 'CONFIG_AGL' }
   ]
 }
 
