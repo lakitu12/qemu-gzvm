@@ -608,7 +608,7 @@ buildQemu() {
     qemuTargets+=(libqemu-gzvm.so)
   fi
   echo "=== meson 目标列表(前2000字符)==="
-  "$mesonBin" introspect -C "$qemuBuild" --targets 2>/dev/null | head -c 2000 || true
+  "$mesonBin" introspect "$qemuBuild" --targets 2>/dev/null | head -c 2000 || true
   echo ""
   "$mesonBin" compile -C "$qemuBuild" "${qemuTargets[@]}" -j"$nCpu"
 }
