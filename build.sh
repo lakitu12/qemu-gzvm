@@ -146,6 +146,10 @@ isSystemLib() {
     *) return 1 ;;
   esac
 }
+# 静态化构建: 删除旧动态构建残留, 防止链接器优先 .so 导致静态化失效
+staticCleanup() {
+  rm -f "$prefix"/lib/*.so "$prefix"/lib/*.so.*
+}
 findLib() {
   local neededName="$1"
   local baseName="$neededName"
@@ -257,7 +261,7 @@ fetchSources() {
   fi
 }
 buildLibffi() {
-  if [ -f "$prefix/lib/libffi.so" ]; then
+  if [ -f "$prefix/lib/libffi.a" ]; then
     return 0
   fi
   [ -d "$srcDir/libffi-${libffiVer}" ] || tar -C "$srcDir" -xf "$srcDir/libffi-${libffiVer}.tar.gz"
@@ -269,8 +273,8 @@ buildLibffi() {
   local configureArgs=(
     --host="$targetTriple"
     --prefix="$prefix"
-    --enable-shared
-    --disable-static
+    --disable-shared
+    --enable-static
     --disable-exec-static-tramp
   )
   env CFLAGS="$libraryCFlags" LDFLAGS="$commonLdFlags" "$srcDir/libffi-${libffiVer}/configure" "${configureArgs[@]}"
@@ -279,7 +283,7 @@ buildLibffi() {
   popd
 }
 buildPcre2() {
-  if [ -f "$prefix/lib/libpcre2-8.so" ]; then
+  if [ -f "$prefix/lib/libpcre2-8.a" ]; then
     return 0
   fi
   [ -d "$srcDir/pcre2-${pcre2Ver}" ] || tar -C "$srcDir" -xf "$srcDir/pcre2-${pcre2Ver}.tar.bz2"
@@ -295,8 +299,8 @@ buildPcre2() {
     -DCMAKE_INSTALL_PREFIX="$prefix"
     -DCMAKE_C_FLAGS="$libraryCFlags"
     -DCMAKE_SHARED_LINKER_FLAGS="$commonLdFlags"
-    -DBUILD_SHARED_LIBS=ON
-    -DBUILD_STATIC_LIBS=OFF
+    -DBUILD_SHARED_LIBS=OFF
+    -DBUILD_STATIC_LIBS=ON
     -DPCRE2_BUILD_PCRE2_8=ON
     -DPCRE2_BUILD_PCRE2_16=OFF
     -DPCRE2_BUILD_PCRE2_32=OFF
@@ -305,14 +309,14 @@ buildPcre2() {
     -DPCRE2_SUPPORT_JIT=OFF
   )
   cmake "${cmakeArgs[@]}"
-  cmake --build "$outDir/pcre2" --target pcre2-8-shared -j"$nCpu"
+  cmake --build "$outDir/pcre2" --target pcre2-8-static -j"$nCpu"
   mkdir -p "$prefix/include" "$prefix/lib/pkgconfig"
-  install -m 755 "$outDir/pcre2/libpcre2-8.so" "$prefix/lib/libpcre2-8.so"
+  install -m 755 "$outDir/pcre2/libpcre2-8.a" "$prefix/lib/libpcre2-8.a"
   install -m 644 "$outDir/pcre2/pcre2.h" "$prefix/include/pcre2.h"
   install -m 644 "$outDir/pcre2/libpcre2-8.pc" "$prefix/lib/pkgconfig/libpcre2-8.pc"
 }
 buildGlib() {
-  if [ -f "$prefix/lib/libglib-2.0.so" ]; then
+  if [ -f "$prefix/lib/libglib-2.0.a" ]; then
     return 0
   fi
   [ -d "$srcDir/glib-${glibVer}" ] || tar -C "$srcDir" -xf "$srcDir/glib-${glibVer}.tar.xz"
@@ -323,7 +327,7 @@ buildGlib() {
   local mesonArgs=(
     --cross-file "$outDir/glib.cross"
     --prefix "$prefix"
-    -Ddefault_library=shared
+    -Ddefault_library=static
     -Doptimization=3
     -Ddebug=false
     -Dglib_debug=disabled
@@ -341,7 +345,7 @@ buildGlib() {
   meson install -C "$outDir/glib"
 }
 buildPixman() {
-  if [ -f "$prefix/lib/libpixman-1.so" ]; then
+  if [ -f "$prefix/lib/libpixman-1.a" ]; then
     return 0
   fi
   [ -d "$srcDir/pixman-${pixmanVer}" ] || tar -C "$srcDir" -xf "$srcDir/pixman-${pixmanVer}.tar.gz"
@@ -350,7 +354,7 @@ buildPixman() {
   local mesonArgs=(
     --cross-file "$outDir/pixman.cross"
     --prefix "$prefix"
-    -Ddefault_library=shared
+    -Ddefault_library=static
     -Dbuildtype=release
     -Dtests=disabled
     -Ddemos=disabled
@@ -441,13 +445,15 @@ preparePkgConfig() {
     echo '#!/usr/bin/env bash'
     echo "export PKG_CONFIG_PATH='$prefix/lib/pkgconfig:$prefix/share/pkgconfig'"
     echo "export PKG_CONFIG_LIBDIR='$prefix/lib/pkgconfig:$prefix/share/pkgconfig'"
-    echo 'exec pkg-config "$@"'
+    # --static: 所有库都是 .a 时, 让 QEMU 的 meson 拿到 Libs.private
+    # (pcre2/ffi/intl 等传递依赖), 否则静态链接会缺符号
+    echo 'exec pkg-config --static "$@"'
   } > "$wrapper"
   chmod +x "$wrapper"
   export PKG_CONFIG="$wrapper"
 }
 buildEpoxy() {
-  if [ -f "$prefix/lib/pkgconfig/epoxy.pc" ] && [ -f "$prefix/lib/libepoxy.so" ]; then
+  if [ -f "$prefix/lib/libepoxy.a" ]; then
     return 0
   fi
   writeMesonCross "$outDir/epoxy.cross"
@@ -455,7 +461,7 @@ buildEpoxy() {
   local mesonArgs=(
     --cross-file "$outDir/epoxy.cross"
     --prefix "$prefix"
-    -Ddefault_library=shared
+    -Ddefault_library=static
     -Doptimization=3
     -Ddebug=false
     -Degl=yes
@@ -471,7 +477,7 @@ buildVirglrenderer() {
   local compatDir="$prefix/include/compat"
   applyPatch "$virglSrc" "$virglPatch" "VirGLRenderer Android 补丁"
   rm -f "$prefix/bin/virgl_test_server"
-  if [ -f "$prefix/lib/pkgconfig/virglrenderer.pc" ] && [ -f "$prefix/lib/libvirglrenderer.so" ]; then
+  if [ -f "$prefix/lib/libvirglrenderer.a" ]; then
     return 0
   fi
   mkdir -p "$compatDir/log" "$compatDir/cutils"
@@ -512,7 +518,7 @@ EOF
   local mesonArgs=(
     --cross-file "$outDir/virgl.cross"
     --prefix "$prefix"
-    -Ddefault_library=shared
+    -Ddefault_library=static
     -Doptimization=3
     -Ddebug=false
     -Dtests=false
@@ -618,6 +624,10 @@ packageQemu() {
   patchelf --set-rpath '$ORIGIN/lib' "$qemuDir/qemu-system-aarch64"
   patchelf --set-rpath '$ORIGIN/lib' "$qemuDir/libqemu-gzvm.so"
   collectRuntime "$qemuDir/qemu-system-aarch64" "$qemuDir/libqemu-gzvm.so"
+  # 全静态化后 lib/ 不再需要, 清掉空目录
+  if [ -d "$qemuLib" ] && [ -z "$(ls -A "$qemuLib" 2>/dev/null)" ]; then
+    rmdir "$qemuLib"
+  fi
   mkdir -p "$jniDir"
   "$strip" --strip-all "$jniBinary" -o "$jniDir/libqemu-gzvm.so"
   patchelf --set-rpath '$ORIGIN' "$jniDir/libqemu-gzvm.so"
@@ -626,6 +636,7 @@ packageQemu() {
   echo "JNI: $jniDir/libqemu-gzvm.so"
 }
 mkdir -p "$buildDir" "$srcDir" "$outDir" "$prefix"
+staticCleanup
 fetchSources
 buildLibffi
 buildPcre2
