@@ -224,6 +224,7 @@ void egl_texture_blend(QemuGLShader *gls, egl_fb *dst, egl_fb *src, bool flip,
 /* ---------------------------------------------------------------------- */
 
 EGLContext qemu_egl_rn_ctx;
+EGLSurface qemu_egl_rn_surface = EGL_NO_SURFACE;
 
 #ifdef CONFIG_GBM
 

@@ -41,6 +41,7 @@ void egl_texture_blend(QemuGLShader *gls, egl_fb *dst, egl_fb *src, bool flip,
                        int x, int y, double scale_x, double scale_y);
 
 extern EGLContext qemu_egl_rn_ctx;
+extern EGLSurface qemu_egl_rn_surface;
 
 #ifdef CONFIG_GBM
 

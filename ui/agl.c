@@ -580,7 +580,7 @@ static void *agl_render_thread(void *opaque)
             glViewport(viewport_x, viewport_y,
                        viewport_width, viewport_height);
             glBindTexture(GL_TEXTURE_2D, source_texture);
-            qemu_gl_run_texture_blit(gls);
+            qemu_gl_run_texture_blit(gls, false);
         }
 
         egl_fb_setup_default(&win_fb, window_width, window_height, 0, 0);
