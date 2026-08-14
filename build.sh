@@ -579,6 +579,7 @@ buildQemu() {
     --disable-virtfs
     --disable-werror
     --disable-install-blobs
+    -Dslirp:default_library=static
     -Doptimization=3
     -Ddebug=false
     -Db_ndebug=false
