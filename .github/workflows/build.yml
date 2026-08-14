@@ -1,66 +1,121 @@
-name: QEMU GenieZone 构建
+# QEMU GZVM 交叉编译 workflow
+# 用法: Actions → Build QEMU GZVM → Run workflow (手动触发)
+# 产物: qemu-gzvm-<NDK版本> 包 (qemu-system-aarch64 + libqemu-gzvm.so + lib/ + fw/)
+#       als-jniLibs-arm64-v8a (可直接覆盖 ALS 工程 jniLibs/arm64-v8a/)
+name: Build QEMU GZVM
+
 on:
-  push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
   workflow_dispatch:
-env:
-  apiLevel: 36
-  ndkPath: "$HOME/android-ndk-r30-beta1"
-  toolchain: "$HOME/android-ndk-r30-beta1/toolchains/llvm/prebuilt/linux-x86_64"
+    inputs:
+      NDK_RELEASE:
+        description: 'Android NDK 版本（r30-beta2 与本地一致）'
+        required: true
+        default: 'r30-beta2'
+        type: choice
+        options:
+          - r30-beta2
+          - r29
+          - r28
+      ALS_DIR:
+        description: 'ALS 工程根目录（留空=CI 虚拟目录，仅产出 jniLibs artifact；可填相对仓库根的路径或绝对路径）'
+        required: false
+        default: ''
+      UPLOAD_ARTIFACTS:
+        description: '上传构建产物'
+        required: false
+        default: true
+        type: boolean
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 180
     steps:
-    - name: 部署
-      run: |
-        sudo apt update
-        sudo apt install --no-install-recommends -y build-essential device-tree-compiler ninja-build pkg-config unzip wget xz-utils
-        sudo pip3 install --upgrade meson
-        wget https://dl.google.com/android/repository/android-ndk-r30-beta1-linux.zip -O ndk.zip
-        unzip -q ndk.zip -d $HOME
-        wget https://raw.githubusercontent.com/AnyLaySys/qemu-gunyah-build/main/1.sh
-        chmod +x ./1.sh
-        ./1.sh
-    - name: 拉取
-      run: |
-        git clone --depth 1 --single-branch --no-tags --filter=blob:none --recurse-submodules --shallow-submodules --also-filter-submodules --jobs $(nproc) https://github.com/AnyLaySys/qemu-gzvm.git build/src/qemu-gzvm-main
-        mkdir -p build/src/qemu-gzvm-main/pyvenv
-        wget https://raw.githubusercontent.com/qemu/qemu/master/pyvenv/meson.build -O build/src/qemu-gzvm-main/pyvenv/meson.build
-        mkdir -p build/src/qemu-gzvm-main/subprojects/packagefiles/berkeley-softfloat-3 build/src/qemu-gzvm-main/subprojects/packagefiles/berkeley-testfloat-3
-        wget https://raw.githubusercontent.com/qemu/qemu/master/subprojects/packagefiles/berkeley-softfloat-3/meson.build -O build/src/qemu-gzvm-main/subprojects/packagefiles/berkeley-softfloat-3/meson.build
-        wget https://raw.githubusercontent.com/qemu/qemu/master/subprojects/packagefiles/berkeley-softfloat-3/meson_options.txt -O build/src/qemu-gzvm-main/subprojects/packagefiles/berkeley-softfloat-3/meson_options.txt
-        wget https://raw.githubusercontent.com/qemu/qemu/master/subprojects/packagefiles/berkeley-testfloat-3/meson.build -O build/src/qemu-gzvm-main/subprojects/packagefiles/berkeley-testfloat-3/meson.build
-        wget https://raw.githubusercontent.com/qemu/qemu/master/subprojects/packagefiles/berkeley-testfloat-3/meson_options.txt -O build/src/qemu-gzvm-main/subprojects/packagefiles/berkeley-testfloat-3/meson_options.txt
-    - name: 编译
-      run: |
-        set -e
-        srcDir="$GITHUB_WORKSPACE/build/src/qemu-gzvm-main"
-        sysrootDir="$GITHUB_WORKSPACE/build/sysroot"
-        toolchain="$HOME/android-ndk-r30-beta1/toolchains/llvm/prebuilt/linux-x86_64"
-        cd "$srcDir"
-        export CC="$toolchain/bin/aarch64-linux-android$apiLevel-clang"
-        export CXX="$toolchain/bin/aarch64-linux-android$apiLevel-clang++"
-        env PATH="$toolchain/bin:$sysrootDir/bin:$PATH" PKG_CONFIG=/usr/bin/pkg-config PKG_CONFIG_LIBDIR="$sysrootDir/lib/pkgconfig" PKG_CONFIG_PATH="$sysrootDir/lib/pkgconfig" LDFLAGS="-L$sysrootDir/lib -Wl,-rpath-link,$sysrootDir/lib" AR="$toolchain/bin/llvm-ar" NM="$toolchain/bin/llvm-nm" OBJCOPY="$toolchain/bin/llvm-objcopy" RANLIB="$toolchain/bin/llvm-ranlib" STRIP="$toolchain/bin/llvm-strip" ./configure --cpu=aarch64 --cross-prefix=aarch64-linux-android- --target-list=aarch64-softmmu --enable-gzvm --enable-tcg --with-coroutine=sigaltstack --extra-cflags="-I$sysrootDir/include -I$srcDir/linux-headers" --disable-dbus-display --disable-docs --disable-gio --disable-hvf --disable-kvm --disable-multiprocess --disable-nitro --disable-opengl --disable-tools --disable-guest-agent --disable-usb-redir --disable-virtfs --disable-vduse-blk-export --disable-libvduse --disable-vhost-crypto --disable-vhost-kernel --disable-vhost-net --disable-vhost-user --disable-vhost-user-blk-server --disable-vhost-vdpa --disable-virglrenderer --disable-werror --disable-qemu-vnc --disable-tpm --disable-install-blobs
-        ninja -C build -j$(nproc) qemu-system-aarch64
-    - name: 打包
-      run: |
-        set -e
-        srcDir="$GITHUB_WORKSPACE/build/src/qemu-gzvm-main"
-        sysrootDir="$GITHUB_WORKSPACE/build/sysroot"
-        qvmDir="$GITHUB_WORKSPACE/qemu-gzvm"
-        toolchain="$HOME/android-ndk-r30-beta1/toolchains/llvm/prebuilt/linux-x86_64"
-        mkdir -p "$qvmDir"
-        cp -L -t "$qvmDir" "$srcDir/build/qemu-system-aarch64" "$sysrootDir/lib/libpixman-1.so" "$sysrootDir/lib/libusb-1.0.so" "$sysrootDir/lib/libglib-2.0.so.0" "$sysrootDir/lib/libgmodule-2.0.so.0" "$sysrootDir/lib/libintl.so.8" "$sysrootDir/lib/libpcre2-8.so" "$toolchain/sysroot/usr/lib/aarch64-linux-android/$apiLevel/libz.so"
-        install -D "$srcDir/pc-bios/keymaps/en-us" "$qvmDir/pc-bios/keymaps/en-us"
-        install -D "$srcDir/pc-bios/efi-virtio.rom" "$qvmDir/pc-bios/efi-virtio.rom"
-        "$toolchain/bin/llvm-strip" --strip-all "$qvmDir/qemu-system-aarch64" "$qvmDir"/*.so
-        tar --numeric-owner -c qemu-gzvm | xz > qemu-gzvm.xz
-    - name: 上传
-      uses: actions/upload-artifact@v7
-      with:
-        name: qemu-gzvm
-        path: qemu-gzvm.xz
-        archive: false
-        if-no-files-found: error
+      - uses: actions/checkout@v4
+
+      - name: 安装宿主依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake ninja-build pkg-config patchelf \
+            python3 python3-venv git curl tar perl unzip \
+            bison flex zlib1g-dev libdrm-dev ca-certificates
+
+      # QEMU 26.8 要求 meson >= 1.5.0；Ubuntu 24.04 自带 1.3.2 不够。
+      # 用独立 venv 安装，避开 PEP 668 的 externally-managed 限制。
+      # pyyaml: virglrenderer src/gallium 的 meson 需要 python3 yaml 模块，
+      #         且 meson 调用的 python3 就是本 venv 的（PATH 前置）。
+      - name: 安装 meson 1.5.0 + PyYAML
+        run: |
+          python3 -m venv "$HOME/meson-venv"
+          "$HOME/meson-venv/bin/pip" install --no-cache-dir meson==1.5.0 pyyaml
+          echo "$HOME/meson-venv/bin" >> "$GITHUB_PATH"
+
+      - name: 缓存 NDK
+        id: ndk-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.tool_cache }}/android-ndk-${{ github.event.inputs.NDK_RELEASE }}
+          key: ndk-${{ runner.os }}-${{ github.event.inputs.NDK_RELEASE }}
+
+      - name: 下载并解压 NDK
+        if: steps.ndk-cache.outputs.cache-hit != 'true'
+        run: |
+          curl -L --fail --retry 3 -o /tmp/ndk.zip \
+            "https://dl.google.com/android/repository/android-ndk-${{ github.event.inputs.NDK_RELEASE }}-linux.zip"
+          mkdir -p "${{ runner.tool_cache }}"
+          unzip -q /tmp/ndk.zip -d "${{ runner.tool_cache }}"
+          rm -f /tmp/ndk.zip
+
+      # build.sh 强制要求 $ALS_DIR/app/src/main 存在（packageQemu 会把
+      # libqemu-gzvm.so 拷进其 jniLibs/arm64-v8a/）。CI 上没有 ALS 工程，
+      # 默认建虚拟目录，构建完把 jniLibs 作为 artifact 上传。
+      - name: 准备 ALS 目录
+        run: |
+          if [ -n "${{ github.event.inputs.ALS_DIR }}" ]; then
+            case "${{ github.event.inputs.ALS_DIR }}" in
+              /*) ALS_ABS="${{ github.event.inputs.ALS_DIR }}" ;;
+              *)  ALS_ABS="${{ github.workspace }}/${{ github.event.inputs.ALS_DIR }}" ;;
+            esac
+          else
+            ALS_ABS="${{ github.workspace }}/als"
+          fi
+          mkdir -p "$ALS_ABS/app/src/main/jniLibs/arm64-v8a"
+          echo "ALS_DIR_CI=$ALS_ABS" >> "$GITHUB_ENV"
+
+      - name: 构建（build.sh 全流程）
+        env:
+          ANDROID_NDK_ROOT: ${{ runner.tool_cache }}/android-ndk-${{ github.event.inputs.NDK_RELEASE }}
+          ALS_DIR: ${{ env.ALS_DIR_CI }}
+        run: |
+          df -h
+          ./build.sh
+
+      # 腾出磁盘空间（14GB runner），只保留最终打包产物
+      - name: 清理中间产物
+        run: |
+          rm -rf "${{ runner.tool_cache }}/android-ndk-${{ github.event.inputs.NDK_RELEASE }}"
+          rm -rf build/src build/qemu build/sysroot
+          find build/out -mindepth 1 -maxdepth 1 ! -name qemu-gzvm -exec rm -rf {} +
+
+      - name: 上传 qemu-gzvm 包
+        if: github.event.inputs.UPLOAD_ARTIFACTS == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: qemu-gzvm-${{ github.event.inputs.NDK_RELEASE }}
+          path: build/out/qemu-gzvm/
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: 上传 ALS jniLibs
+        if: github.event.inputs.UPLOAD_ARTIFACTS == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: als-jniLibs-arm64-v8a
+          path: ${{ env.ALS_DIR_CI }}/app/src/main/jniLibs/arm64-v8a/
+          if-no-files-found: error
+          retention-days: 7
